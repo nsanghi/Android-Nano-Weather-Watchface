@@ -24,6 +24,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.annotation.IntDef;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
 import android.text.format.Time;
@@ -36,6 +38,15 @@ import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -52,7 +63,8 @@ import java.net.URL;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
-public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
+public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements
+        GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
     public final String LOG_TAG = SunshineSyncAdapter.class.getSimpleName();
     public static final String ACTION_DATA_UPDATED =
             "com.example.android.sunshine.app.ACTION_DATA_UPDATED";
@@ -86,6 +98,10 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     public static final int LOCATION_STATUS_SERVER_INVALID = 2;
     public static final int LOCATION_STATUS_UNKNOWN = 3;
     public static final int LOCATION_STATUS_INVALID = 4;
+
+    GoogleApiClient mGoogleApiClient;
+
+
 
     public SunshineSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
@@ -347,6 +363,7 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 updateWidgets();
                 updateMuzei();
                 notifyWeather();
+                notifyWeatherToWearable();
             }
             Log.d(LOG_TAG, "Sync Complete. " + cVVector.size() + " Inserted");
             setLocationStatus(getContext(), LOCATION_STATUS_OK);
@@ -480,6 +497,94 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 }
                 cursor.close();
             }
+        }
+    }
+
+    // to send data to Wearble using Data API
+    private void notifyWeatherToWearable() {
+        Log.d(LOG_TAG, "Inside notifyWeatherToWearable");
+        if ((mGoogleApiClient != null) && mGoogleApiClient.isConnected()) {
+            //send Weather Data to Wearable
+            sendToWearable();
+        } else {
+            mGoogleApiClient = new GoogleApiClient.Builder(getContext())
+                .addApi(Wearable.API)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
+
+            mGoogleApiClient.connect();
+
+        }
+
+    }
+
+    //override methods from ConnectionCallback and ConnectionFailed
+    @Override
+    public void onConnected(@Nullable Bundle bundle) {
+        Log.d(LOG_TAG, "onConnected: " + bundle);
+        sendToWearable();
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+        Log.d(LOG_TAG, "onConnectionSuspended: " + i);
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.d(LOG_TAG, "onConnectionFailed: " + connectionResult);
+    }
+
+    //Method to send data to Wearable
+    private void sendToWearable() {
+
+        Context context = getContext();
+        String locationQuery = Utility.getPreferredLocation(this.getContext());
+
+        Uri weatherUri = WeatherContract.WeatherEntry.buildWeatherLocationWithDate(locationQuery, System.currentTimeMillis());
+
+        // we'll query our contentProvider, as always
+        Cursor cursor = context.getContentResolver().query(weatherUri, NOTIFY_WEATHER_PROJECTION, null, null, null);
+        Log.d(LOG_TAG, "Number of rows in query for Wearable :" + cursor.getCount());
+
+        if (cursor.getCount() != 0 && cursor.moveToFirst()) {
+
+            int weatherId = cursor.getInt(INDEX_WEATHER_ID);
+            double high = cursor.getDouble(INDEX_MAX_TEMP);
+            double low = cursor.getDouble(INDEX_MIN_TEMP);
+            String highString = Utility.formatTemperature(context, high);
+            String lowString = Utility.formatTemperature(context, low);
+
+            Log.d(LOG_TAG, "Wearable Update(weatherId:High:Low: " +weatherId + ":" + highString + ":" +lowString);
+
+            Resources resources = context.getResources();
+            Bitmap icon = BitmapFactory.decodeResource(resources,
+                    Utility.getArtResourceForWeatherCondition(cursor.getInt(INDEX_WEATHER_ID)));
+            Asset iconAsset = Utility.createAssetFromBitmap(icon);
+
+            PutDataMapRequest putDataMapRequest = PutDataMapRequest.create("/weather");
+            //putDataMapRequest.getDataMap().putLong("TIME",System.currentTimeMillis());
+            putDataMapRequest.getDataMap().putString("HIGH", highString);
+            putDataMapRequest.getDataMap().putString("LOW", lowString);
+            putDataMapRequest.getDataMap().putAsset("ICON", iconAsset);
+
+            PutDataRequest putDataRequest = putDataMapRequest.asPutDataRequest();
+
+            PendingResult<DataApi.DataItemResult> pendingResult =
+                    Wearable.DataApi.putDataItem(mGoogleApiClient, putDataRequest);
+
+            pendingResult.setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+                @Override
+                public void onResult(@NonNull DataApi.DataItemResult dataItemResult) {
+                    if (dataItemResult.getStatus().isSuccess()) {
+                        Log.v(LOG_TAG, "Data Item sent : " + dataItemResult.getDataItem().getUri());
+                    } else {
+                        Log.v(LOG_TAG, "Data Item Status : " + dataItemResult.getStatus());
+                    }
+                }
+            });
+
         }
     }
 

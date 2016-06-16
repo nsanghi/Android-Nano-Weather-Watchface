@@ -25,6 +25,7 @@ android {
 
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
+    wearApp project(':wearable')
     compile 'com.github.bumptech.glide:glide:3.5.2'
     compile 'com.android.support:support-annotations:23.4.0'
     compile 'com.android.support:gridlayout-v7:23.4.0'
@@ -33,5 +34,7 @@ dependencies {
     compile 'com.android.support:design:23.4.0'
     compile 'com.android.support:recyclerview-v7:23.4.0'
     compile 'com.google.android.apps.muzei:muzei-api:2.0'
-    compile 'com.google.android.gms:play-services-gcm:9.0.1'
+    compile 'com.google.android.gms:play-services-gcm:9.0.2'
+    compile 'com.google.android.gms:play-services-wearable:9.0.2'
+    compile 'com.android.support:support-v4:23.4.0'
 }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- square watchFace -->
+    <dimen name="digital_time_size">40dp</dimen>
+    <dimen name="digital_date_size">16dp</dimen>
+    <dimen name="digital_temperature_size">26dp</dimen>
+
+
+    <dimen name="digital_text_size_round">45dp</dimen>
+    <dimen name="digital_x_offset">15dp</dimen>
+    <dimen name="digital_x_offset_round">25dp</dimen>
+    <dimen name="digital_y_offset">75dp</dimen>
+
+    <dimen name="date_font_size">100sp</dimen>
+</resources>
