@@ -50,6 +50,7 @@ import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataItemBuffer;
 import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.PutDataMapRequest;
@@ -108,7 +109,8 @@ public class WeatherWatchFace extends CanvasWatchFaceService  {
     }
 
     private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener,
-            GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+            GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener,
+            ResultCallback<DataItemBuffer> {
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
@@ -147,6 +149,7 @@ public class WeatherWatchFace extends CanvasWatchFaceService  {
         public void onConnected(@Nullable Bundle bundle) {
             Log.d(LOG_TAG, "in onConnected");
             Wearable.DataApi.addListener(mGoogleApiClient, this);
+            Wearable.DataApi.getDataItems(mGoogleApiClient).setResultCallback(this);
 
         }
 
@@ -158,6 +161,43 @@ public class WeatherWatchFace extends CanvasWatchFaceService  {
         @Override
         public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
 
+        }
+
+
+        @Override
+        public void onResult(@NonNull DataItemBuffer dataItems) {
+            for (DataItem item : dataItems) {
+                if (!item.isDataValid()) return;
+                String path = item.getUri().getPath();
+                Log.d(LOG_TAG, "Data Item path:" + path);
+                if (path.compareTo("/weather") == 0) {
+                    DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+                    if (dataMap.containsKey("HIGH")) {
+                        mHigh = dataMap.getString("HIGH");
+                        Log.d(LOG_TAG, "HIgh=" + mHigh);
+                    } else {
+                        Log.d(LOG_TAG, "key=HIGH not found on dataMap");
+                    }
+                    if (dataMap.containsKey("LOW")) {
+                        mLow = dataMap.getString("LOW");
+                        Log.d(LOG_TAG, "Low=" + mLow);
+                    } else {
+                        Log.d(LOG_TAG, "key=LOW not found on dataMap");
+                    }
+                    if (dataMap.containsKey("ICON")) {
+                        Asset asset = dataMap.getAsset("ICON");
+                        DownloadFilesTask task = new DownloadFilesTask();
+                        task.execute(asset);
+                    } else {
+                        Log.d(LOG_TAG, "key=ICON not found on dataMap");
+                    }
+                    dataItems.release();
+                    if (isVisible() && !isInAmbientMode()) {
+                        invalidate();
+                    }
+                }
+
+            }
         }
 
         @Override
@@ -189,6 +229,7 @@ public class WeatherWatchFace extends CanvasWatchFaceService  {
                         } else {
                             Log.d(LOG_TAG, "key=ICON not found on dataMap");
                         }
+                        dataEventBuffer.release();
                         invalidate();
                     }
                 }
