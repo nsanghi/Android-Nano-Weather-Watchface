@@ -22,6 +22,8 @@ Getting Started
 This sample uses the Gradle build system.  To build this project, use the
 "gradlew build" command or use "Import Project" in Android Studio.
 
+You also need to add your openweather api key in gradle.properties
+
 Support
 -------
 
